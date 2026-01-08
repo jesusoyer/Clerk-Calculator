@@ -275,34 +275,20 @@ function BacktimeCard() {
       className="
         relative w-full max-w-lg
         rounded-xl border border-gray-200 bg-white shadow-md
-        p-6 space-y-6
+        p-4 sm:p-6 space-y-6
         text-xs
         transition-all duration-300
         flex flex-col items-center
       "
     >
-      {/* Header row with title + clear button */}
-      <div className="w-full flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-sm text-gray-900">
-          Clerk Calculator
-        </h3>
-
-        <button
-          type="button"
-          onClick={handleClearAll}
-          className="text-[12px] font-semibold px-4 py-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
-        >
-          Clear
-        </button>
-      </div>
-
-      {/* Mode toggle */}
-      <div className="w-full flex justify-center mb-4">
-        <div className="flex flex-wrap justify-center gap-3">
+      {/* Mode toggle + Clear on the same line (stack on mobile) */}
+      <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        {/* Left: mode buttons */}
+        <div className="flex flex-wrap justify-start gap-2 sm:gap-3">
           <button
             type="button"
             onClick={() => setMode("STATE_JAIL")}
-            className={`px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
+            className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
               mode === "STATE_JAIL"
                 ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
                 : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
@@ -313,13 +299,31 @@ function BacktimeCard() {
           <button
             type="button"
             onClick={() => setMode("TCJ_TDCJ")}
-            className={`px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
+            className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
               mode === "TCJ_TDCJ"
                 ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
                 : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
             }`}
           >
             TCJ/TDCJ/ACOP
+          </button>
+        </div>
+
+        {/* Right: Clear button – faded red base, redder on hover/active */}
+        <div className="flex sm:justify-end">
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className="
+              px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
+              bg-red-100 text-red-700 border-red-200
+              hover:bg-red-400 hover:text-white hover:border-red-400
+              active:bg-red-500 active:border-red-500
+              transition active:scale-95
+              focus:outline-none focus:ring-1 focus:ring-red-200
+            "
+          >
+            Clear
           </button>
         </div>
       </div>
@@ -343,7 +347,8 @@ function BacktimeCard() {
 
           return (
             <div key={row.id} className="space-y-3">
-              <div className="flex flex-nowrap items-center justify-center gap-3">
+              {/* Date row – stack on mobile, inline on larger screens */}
+              <div className="flex flex-col sm:flex-row sm:flex-nowrap items-center justify-center gap-2 sm:gap-3">
                 {/* Date Range Field 1 */}
                 <input
                   type="text"
@@ -359,7 +364,7 @@ function BacktimeCard() {
                   ref={(el) => {
                     startRefs.current[index] = el;
                   }}
-                  className="border rounded px-3 py-1.5 text-[11px] w-[9.5rem] text-center font-mono placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
+                  className="border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
                 />
 
                 {/* Date Range Field 2 */}
@@ -377,19 +382,21 @@ function BacktimeCard() {
                   ref={(el) => {
                     endRefs.current[index] = el;
                   }}
-                  className="border rounded px-3 py-1.5 text-[11px] w-[9.5rem] text-center font-mono placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
+                  className="border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
                 />
 
                 {/* = number of days */}
-                <span className="text-[11px] font-semibold px-1 text-gray-700">
-                  =
-                </span>
-
-                <span className="min-w-[70px] text-[11px] font-semibold text-gray-900 text-center">
-                  {display}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-semibold text-gray-700">
+                    =
+                  </span>
+                  <span className="min-w-[70px] text-[11px] font-semibold text-gray-900 text-center">
+                    {display}
+                  </span>
+                </div>
               </div>
 
+              {/* Row controls */}
               {showRowControls && (
                 <div className="w-full flex justify-center mt-2">
                   <div className="flex flex-wrap justify-center gap-2">
@@ -419,7 +426,7 @@ function BacktimeCard() {
 
       {/* Combined total + expression */}
       <div className="w-full pt-3 border-t border-gray-100 mt-4 flex flex-col items-center gap-2">
-        <span className="text-[11px] font-semibold text-gray-700 text-center">
+        <span className="text-[11px] font-semibold text-gray-700 text-center px-2">
           Combined total (
           {mode === "STATE_JAIL" ? "State jail" : "TCJ/TDCJ/ACOP"})
         </span>
@@ -429,8 +436,8 @@ function BacktimeCard() {
 
         {/* Combined range expression + copy button */}
         {combinedExpression && (
-          <div className="mt-2 flex items-center justify-center gap-3">
-            <span className="text-[12px] text-gray-900 font-semibold text-center">
+          <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 px-2 text-center">
+            <span className="text-[12px] text-gray-900 font-semibold">
               {combinedExpression}
             </span>
             <button
@@ -450,7 +457,7 @@ function BacktimeCard() {
 // This wraps the card and centers it in the window
 export default function BacktimeCalculator() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-3 sm:px-4">
       <BacktimeCard />
     </main>
   );
