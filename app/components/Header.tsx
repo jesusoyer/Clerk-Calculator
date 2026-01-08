@@ -32,32 +32,39 @@ export default function Header() {
           </button>
 
           {open && (
-            <div
-              className="
-                absolute right-0 mt-2 w-64 sm:w-80
-                rounded-lg border border-gray-200 bg-white shadow-lg
-                p-3 sm:p-4 text-xs sm:text-sm text-gray-700 z-20
-              "
-            >
-              <p className="mb-2">
-                <span className="font-semibold">Basics:</span> Choose{" "}
-                <span className="font-medium">State jail</span> or{" "}
-                <span className="font-medium">TCJ/TDCJ/ACOP</span>, then enter
-                your date ranges as <code>MM/DD/YY</code> or just 6–8 digits
-                (e.g. <code>010125</code> → <code>01/01/25</code>).
-              </p>
-              <p className="mb-2">
-                Use <span className="font-medium">Tab</span> or{" "}
-                <span className="font-medium">Enter</span> to move between
-                fields. When you’re on the last end date, pressing Enter will
-                add a new row.
-              </p>
-              <p>
-                The calculator shows the days for each range, a combined total
-                at the bottom, and a text expression you can{" "}
-                <span className="font-medium">Copy</span> into your paperwork.
-              </p>
-            </div>
+           <div
+  className="
+    absolute right-0 mt-2 w-64 sm:w-80
+    rounded-lg border border-gray-200 bg-white shadow-lg
+    p-3 sm:p-4 text-xs sm:text-sm text-gray-700 z-20
+  "
+>
+  <p className="mb-2">
+    <span className="font-semibold">Basics:</span> Choose{" "}
+    <span className="font-medium">State jail</span> or{" "}
+    <span className="font-medium">TCJ/TDCJ/ACOP</span>, then enter
+    your date ranges as <code>MM/DD/YY</code> or just 6–8 digits
+    (e.g. <code>010125</code> → <code>01/01/25</code>).
+  </p>
+  <p className="mb-2">
+    Use <span className="font-medium">Tab</span> or{" "}
+    <span className="font-medium">Enter</span> to move between
+    fields. When you’re on the last end date, pressing Enter will
+    add a new row.
+  </p>
+  <p className="mb-2">
+    The calculator shows the days for each range, a combined total
+    at the bottom, and a text expression you can{" "}
+    <span className="font-medium">Copy</span> into your paperwork.
+  </p>
+  <p>
+    To reset everything quickly, press{" "}
+    <span className="font-medium">Ctrl + 0</span> (Windows) or{" "}
+    <span className="font-medium">Cmd + 0</span> (Mac) to{" "}
+    clear the calculator.
+  </p>
+</div>
+
           )}
         </div>
       </div>

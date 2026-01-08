@@ -263,6 +263,21 @@ function BacktimeCard() {
     }
   }
 
+  // ⌨️ Keyboard shortcut: Ctrl+0 / Cmd+0 to clear the calculator
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent | any) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        handleClearAll();
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }
+  }, [handleClearAll]);
+
   // Enter behavior on START field: go to end field (same row)
   function handleStartKeyDown(
     e: KeyboardEvent<HTMLInputElement>,
