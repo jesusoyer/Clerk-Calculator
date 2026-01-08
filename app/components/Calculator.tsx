@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { KeyboardEvent } from "react";
 
 interface TimeRangeRow {
@@ -10,6 +10,8 @@ interface TimeRangeRow {
 }
 
 type CalcMode = "STATE_JAIL" | "TCJ_TDCJ";
+
+const STORAGE_KEY = "clerk-calculator-state-v1";
 
 /**
  * Normalize whatever the user typed into MM/DD/YY when possible.
@@ -129,6 +131,47 @@ function BacktimeCard() {
   const startRefs = useRef<Array<HTMLInputElement | null>>([]);
   const endRefs = useRef<Array<HTMLInputElement | null>>([]);
 
+  // ---- Load from localStorage on mount ----
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return;
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as {
+        rows?: TimeRangeRow[];
+        mode?: CalcMode;
+      };
+
+      if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+        // Ensure each row has id/start/end
+        const safeRows = parsed.rows.map((row) => ({
+          id: row.id ?? Date.now() + Math.random(),
+          start: row.start ?? "",
+          end: row.end ?? "",
+        }));
+        setRows(safeRows);
+      }
+
+      if (parsed.mode === "STATE_JAIL" || parsed.mode === "TCJ_TDCJ") {
+        setMode(parsed.mode);
+      }
+    } catch {
+      // If anything goes wrong, just ignore and use defaults
+    }
+  }, []);
+
+  // ---- Save to localStorage whenever rows or mode change ----
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return;
+      const payload = JSON.stringify({ rows, mode });
+      window.localStorage.setItem(STORAGE_KEY, payload);
+    } catch {
+      // ignore storage errors
+    }
+  }, [rows, mode]);
+
   const totalDays = rows.reduce(
     (sum, row) => sum + getDurationDays(row, mode),
     0
@@ -207,7 +250,17 @@ function BacktimeCard() {
   }
 
   function handleClearAll() {
-    setRows([{ id: Date.now() + Math.random(), start: "", end: "" }]);
+    const fresh = [{ id: Date.now() + Math.random(), start: "", end: "" }];
+    setRows(fresh);
+    setMode("STATE_JAIL");
+    setCopied(false);
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
   }
 
   // Enter behavior on START field: go to end field (same row)
