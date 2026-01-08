@@ -42,7 +42,7 @@ export default function Header() {
   <p className="mb-2">
     <span className="font-semibold">Basics:</span> Choose{" "}
     <span className="font-medium">State jail</span> or{" "}
-    <span className="font-medium">TCJ/TDCJ/ACOP</span>, then enter
+    <span className="font-medium">TCJ/TDCJ/ACOP (+1)</span>, then enter
     your date ranges as <code>MM/DD/YY</code> or just 6–8 digits
     (e.g. <code>010125</code> → <code>01/01/25</code>).
   </p>
