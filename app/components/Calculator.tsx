@@ -437,6 +437,64 @@ function BacktimeCard() {
     setSavedOpen(true);
   }
 
+  // 🔹 NEW: Update existing saved calculation when one is active
+  function handleUpdateCurrent() {
+    if (activeSavedId === null) {
+      // Fallback – shouldn't happen under normal UI, but just in case
+      handleSaveCurrent();
+      return;
+    }
+
+    setSaveError(null);
+
+    if (!combinedExpression || totalDays <= 0) {
+      setSaveError("You need at least one valid date range to save.");
+      return;
+    }
+
+    const trimmed = identifier.trim();
+    // If identifier is empty, keep the original label
+    const proposedLabel = trimmed || activeSavedId;
+
+    // Disallow duplicates except for the one we're editing
+    const duplicate = savedCalculations.some(
+      (c) =>
+        c.label.toLowerCase() === proposedLabel.toLowerCase() &&
+        c.label !== activeSavedId
+    );
+    if (duplicate) {
+      setSaveError("That identifier is already used. Please choose another.");
+      return;
+    }
+
+    const snapshotRows = rows.map((r) => ({ ...r }));
+
+    const updated = savedCalculations.map((c) =>
+      c.label === activeSavedId
+        ? {
+            ...c,
+            label: proposedLabel,
+            rows: snapshotRows,
+            mode,
+            // keep original createdAt; or use Date.now() if you prefer "last updated"
+          }
+        : c
+    );
+
+    setSavedCalculations(updated);
+    setActiveSavedId(proposedLabel);
+
+    const message = `The calculation "${proposedLabel}" was updated.`;
+    setSaveBanner(message);
+
+    if (bannerTimeoutRef.current) {
+      clearTimeout(bannerTimeoutRef.current);
+    }
+    bannerTimeoutRef.current = setTimeout(() => {
+      setSaveBanner(null);
+    }, 3000);
+  }
+
   // Handle selecting an item from SavedCalculations
   function handleSelectSaved(id: string | null) {
     if (id === null) {
@@ -490,229 +548,254 @@ function BacktimeCard() {
     })
   );
 
+  const isEditingSaved = activeSavedId !== null;
+
+  // 🔹 Layout: full width, list near left edge, calculator centered in the rest
   return (
-    <div className="w-full max-w-5xl flex flex-col md:flex-row gap-4 items-start justify-center">
-      {/* Left: Saved Calculations panel */}
-      <SavedCalculationsPanel
-        items={savedSummaries}
-        isOpen={savedOpen}
-        activeId={activeSavedId}
-        onToggleOpen={() => setSavedOpen((prev) => !prev)}
-        onSelect={handleSelectSaved}
-        onDelete={handleDeleteSaved}
-      />
+    <div className="w-full flex flex-col md:flex-row items-start">
+      {/* Left: Saved Calculations panel, closer to the left edge */}
+      <div className="w-full md:w-auto pl-2 sm:pl-3 md:pl-4 md:mr-8 md:flex-shrink-0">
+        <SavedCalculationsPanel
+          items={savedSummaries}
+          isOpen={savedOpen}
+          activeId={activeSavedId}
+          onToggleOpen={() => setSavedOpen((prev) => !prev)}
+          onSelect={handleSelectSaved}
+          onDelete={handleDeleteSaved}
+        />
+      </div>
 
-      {/* Right: Calculator card */}
-      <div
-        className="
-          relative w-full md:max-w-lg
-          rounded-xl border border-gray-200 bg-white shadow-md
-          p-4 sm:p-6 space-y-6
-          text-xs
-          transition-all duration-300
-          flex flex-col items-center
-        "
-      >
-        {/* Success banner directly above the card body */}
-        {saveBanner && (
-          <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-4 py-2 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 text-[12px] shadow-sm">
-            {saveBanner}
-          </div>
-        )}
-
-        {/* Identifier */}
-        <div className="w-full mb-2 flex flex-col items-center">
-          <label className="block text-[11px] font-semibold text-gray-700 mb-1 text-center">
-            Identifier (optional)
-          </label>
-          <input
-            type="text"
-            value={identifier}
-            onChange={(e) => {
-              setIdentifier(e.target.value);
-              setSaveError(null);
-            }}
-            placeholder='e.g. "Smith cause #1234"'
-            className="w-full sm:w-72 max-w-xs border rounded px-3 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
-          />
-          {saveError && (
-            <p className="mt-1 text-[11px] text-red-600 text-center">
-              {saveError}
-            </p>
-          )}
-        </div>
-
-        {/* Mode toggle – centered, removed from tab order */}
-        <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3 mb-4">
-          <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setMode("STATE_JAIL")}
-              className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
-                mode === "STATE_JAIL"
-                  ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
-                  : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
-              }`}
-            >
-              STATE JAIL
-            </button>
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setMode("TCJ_TDCJ")}
-              className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
-                mode === "TCJ_TDCJ"
-                  ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
-                  : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
-              }`}
-            >
-              TCJ/TDCJ/ACOP
-            </button>
-          </div>
-        </div>
-
-        {/* Rows */}
-        <div className="w-full mt-2 mb-4 space-y-5">
-          {rows.map((row, index) => {
-            const days = getDurationDays(row, mode);
-            const display =
-              row.start && row.end ? formatDays(days) : "—";
-
-            const isLast = index === rows.length - 1;
-            const isFirst = index === 0;
-            const rowComplete = !!(row.start && row.end);
-
-            const showRowControls =
-              (rows.length === 1 && isFirst && rowComplete) ||
-              (rows.length > 1 && isLast);
-
-            return (
-              <div key={row.id} className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:flex-nowrap items-center justify-center gap-2 sm:gap-3">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="MM/DD/YY"
-                    value={row.start}
-                    onChange={(e) =>
-                      updateRow(row.id, "start", e.target.value)
-                    }
-                    onBlur={() => normalizeRowField(row.id, "start")}
-                    onKeyDown={(e) => handleStartKeyDown(e, index)}
-                    ref={(el) => {
-                      startRefs.current[index] = el;
-                    }}
-                    className="border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
-                  />
-
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="MM/DD/YY"
-                    value={row.end}
-                    onChange={(e) =>
-                      updateRow(row.id, "end", e.target.value)
-                    }
-                    onBlur={() => normalizeRowField(row.id, "end")}
-                    onKeyDown={(e) => handleEndKeyDown(e, index)}
-                    ref={(el) => {
-                      endRefs.current[index] = el;
-                    }}
-                    className="border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
-                  />
-
-                  <div className="flex items-center gap-1">
-                    <span className="text-[11px] font-semibold text-gray-700">
-                      =
-                    </span>
-                    <span className="min-w-[70px] text-[11px] font-semibold text-gray-900 text-center">
-                      {display}
-                    </span>
-                  </div>
-                </div>
-
-                {showRowControls && (
-                  <div className="w-full flex justify-center mt-2">
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={addRow}
-                        className="px-3 py-1.5 rounded-md border border-gray-300 text-[11px] font-semibold text-gray-900 bg-white hover:bg-gray-100 whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
-                      >
-                        + Add row
-                      </button>
-                      <button
-                        type="button"
-                        onClick={removeLastRow}
-                        className="px-3 py-1.5 rounded-md border border-gray-300 text-[11px] font-semibold text-gray-900 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
-                      >
-                        − Remove row
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Save + Clear row */}
-        <div className="w-full flex justify-end gap-2 mt-1">
-          <button
-            type="button"
-            onClick={handleSaveCurrent}
-            className="
-              px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
-              bg-amber-50 text-amber-800 border-amber-200
-              hover:bg-amber-200 hover:border-amber-300
-              active:bg-amber-300 active:border-amber-400
-              transition active:scale-95
-              focus:outline-none focus:ring-1 focus:ring-amber-200
-            "
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={handleClearAll}
-            className="
-              px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
-              bg-red-100 text-red-700 border-red-200
-              hover:bg-red-400 hover:text-white hover:border-red-400
-              active:bg-red-500 active:border-red-500
-              transition active:scale-95
-              focus:outline-none focus:ring-1 focus:ring-red-200
-            "
-          >
-            Clear
-          </button>
-        </div>
-
-        {/* Combined total + expression */}
-        <div className="w-full pt-3 border-t border-gray-100 mt-4 flex flex-col items-center gap-2">
-          <span className="text-[11px] font-semibold text-gray-700 text-center px-2">
-            Combined total (
-            {mode === "STATE_JAIL" ? "State jail" : "TCJ/TDCJ/ACOP"})
-          </span>
-          <span className="inline-flex items-center justify-center px-6 py-2 rounded-full bg-gray-900 text-white text-[13px] font-semibold whitespace-nowrap">
-            {formatDays(totalDays)}
-          </span>
-
-          {combinedExpression && (
-            <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 px-2 text-center">
-              <span className="text-[12px] text-gray-900 font-semibold">
-                {combinedExpression}
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyExpression}
-                className="px-2.5 py-1 rounded-md border border-gray-300 bg-white text-[11px] font-semibold text-gray-900 hover:bg-gray-100 active:scale-95 transition focus:outline-none focus:ring-1 focus:ring-gray-300"
-              >
-                {copied ? "Copied" : "Copy"}
-              </button>
+      {/* Right: Calculator centered in remaining space */}
+      <div className="flex-1 flex justify-center mt-4 md:mt-0 pr-2 sm:pr-3 md:pr-4">
+        <div
+          className="
+            relative w-full md:max-w-lg
+            rounded-xl border border-gray-200 bg-white shadow-md
+            p-4 sm:p-6 space-y-6
+            text-xs
+            transition-all duration-300
+            flex flex-col items-center
+          "
+        >
+          {/* Success banner directly above the card body */}
+          {saveBanner && (
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-4 py-2 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 text-[12px] shadow-sm">
+              {saveBanner}
             </div>
           )}
+
+          {/* Identifier */}
+          <div className="w-full mb-2 flex flex-col items-center">
+            <label className="block text-[11px] font-semibold text-gray-700 mb-1 text-center">
+              Identifier (optional)
+            </label>
+            <input
+              type="text"
+              value={identifier}
+              onChange={(e) => {
+                setIdentifier(e.target.value);
+                setSaveError(null);
+              }}
+              placeholder='e.g. Number, Name, Case number"'
+              className="w-full sm:w-72 max-w-xs border rounded px-3 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
+            />
+            {saveError && (
+              <p className="mt-1 text-[11px] text-red-600 text-center">
+                {saveError}
+              </p>
+            )}
+          </div>
+
+          {/* Mode toggle – centered, removed from tab order */}
+          <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3 mb-4">
+            <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setMode("STATE_JAIL")}
+                className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
+                  mode === "STATE_JAIL"
+                    ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
+                    : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
+                }`}
+              >
+                STATE JAIL
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setMode("TCJ_TDCJ")}
+                className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
+                  mode === "TCJ_TDCJ"
+                    ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
+                    : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
+                }`}
+              >
+                TCJ/TDCJ/ACOP
+              </button>
+            </div>
+          </div>
+
+          {/* Rows */}
+          <div className="w-full mt-2 mb-4 space-y-5">
+            {rows.map((row, index) => {
+              const days = getDurationDays(row, mode);
+              const display =
+                row.start && row.end ? formatDays(days) : "—";
+
+              const isLast = index === rows.length - 1;
+              const isFirst = index === 0;
+              const rowComplete = !!(row.start && row.end);
+
+              const showRowControls =
+                (rows.length === 1 && isFirst && rowComplete) ||
+                (rows.length > 1 && isLast);
+
+              return (
+                <div key={row.id} className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:flex-nowrap items-center justify-center gap-2 sm:gap-3">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="MM/DD/YY"
+                      value={row.start}
+                      onChange={(e) =>
+                        updateRow(row.id, "start", e.target.value)
+                      }
+                      onBlur={() => normalizeRowField(row.id, "start")}
+                      onKeyDown={(e) => handleStartKeyDown(e, index)}
+                      ref={(el) => {
+                        startRefs.current[index] = el;
+                      }}
+                      className="border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
+                    />
+
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="MM/DD/YY"
+                      value={row.end}
+                      onChange={(e) =>
+                        updateRow(row.id, "end", e.target.value)
+                      }
+                      onBlur={() => normalizeRowField(row.id, "end")}
+                      onKeyDown={(e) => handleEndKeyDown(e, index)}
+                      ref={(el) => {
+                        endRefs.current[index] = el;
+                      }}
+                      className="border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
+                    />
+
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] font-semibold text-gray-700">
+                        =
+                      </span>
+                      <span className="min-w-[70px] text-[11px] font-semibold text-gray-900 text-center">
+                        {display}
+                      </span>
+                    </div>
+                  </div>
+
+                  {showRowControls && (
+                    <div className="w-full flex justify-center mt-2">
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={addRow}
+                          className="px-3 py-1.5 rounded-md border border-gray-300 text-[11px] font-semibold text-gray-900 bg-white hover:bg-gray-100 whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                        >
+                          + Add row
+                        </button>
+                        <button
+                          type="button"
+                          onClick={removeLastRow}
+                          className="px-3 py-1.5 rounded-md border border-gray-300 text-[11px] font-semibold text-gray-900 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                        >
+                          − Remove row
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Save / Update + Clear row */}
+          <div className="w-full flex justify-end gap-2 mt-1">
+            {isEditingSaved ? (
+              <button
+                type="button"
+                onClick={handleUpdateCurrent}
+                className="
+                  px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
+                  bg-amber-50 text-amber-800 border-amber-200
+                  hover:bg-amber-200 hover:border-amber-300
+                  active:bg-amber-300 active:border-amber-400
+                  transition active:scale-95
+                  focus:outline-none focus:ring-1 focus:ring-amber-200
+                "
+              >
+                Update
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSaveCurrent}
+                className="
+                  px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
+                  bg-amber-50 text-amber-800 border-amber-200
+                  hover:bg-amber-200 hover:border-amber-300
+                  active:bg-amber-300 active:border-amber-400
+                  transition active:scale-95
+                  focus:outline-none focus:ring-1 focus:ring-amber-200
+                "
+              >
+                Save
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="
+                px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
+                bg-red-100 text-red-700 border-red-200
+                hover:bg-red-400 hover:text-white hover:border-red-400
+                active:bg-red-500 active:border-red-500
+                transition active:scale-95
+                focus:outline-none focus:ring-1 focus:ring-red-200
+              "
+            >
+              Clear
+            </button>
+          </div>
+
+          {/* Combined total + expression */}
+          <div className="w-full pt-3 border-t border-gray-100 mt-4 flex flex-col items-center gap-2">
+            <span className="text-[11px] font-semibold text-gray-700 text-center px-2">
+              Combined total (
+              {mode === "STATE_JAIL" ? "State jail" : "TCJ/TDCJ/ACOP"})
+            </span>
+            <span className="inline-flex items-center justify-center px-6 py-2 rounded-full bg-gray-900 text-white text-[13px] font-semibold whitespace-nowrap">
+              {formatDays(totalDays)}
+            </span>
+
+            {combinedExpression && (
+              <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 px-2 text-center">
+                <span className="text-[12px] text-gray-900 font-semibold">
+                  {combinedExpression}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyExpression}
+                  className="px-2.5 py-1 rounded-md border border-gray-300 bg-white text-[11px] font-semibold text-gray-900 hover:bg-gray-100 active:scale-95 transition focus:outline-none focus:ring-1 focus:ring-gray-300"
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -721,7 +804,8 @@ function BacktimeCard() {
 
 export default function Calculator() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-3 sm:px-4">
+    <main className="min-h-screen flex items-center bg-gray-50 px-0 sm:px-0">
+      {/* Note: no justify-center here so the BacktimeCard can hug the left */}
       <BacktimeCard />
     </main>
   );

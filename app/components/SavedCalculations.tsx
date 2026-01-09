@@ -1,117 +1,158 @@
 // components/SavedCalculations.tsx
 "use client";
 
-import React from "react";
-
 export interface SavedCalculationSummary {
-  id: string;        // label / identifier
-  createdAt: number; // timestamp
+  id: string;
+  createdAt: number;
 }
 
-interface SavedCalculationsProps {
+interface SavedCalculationsPanelProps {
   items: SavedCalculationSummary[];
   isOpen: boolean;
-  activeId: string | null;          // null = "Current calculation"
+  activeId: string | null;
   onToggleOpen: () => void;
-  onSelect: (id: string | null) => void; // null selects current live calc
+  onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
 }
 
-export default function SavedCalculations({
+export default function SavedCalculationsPanel({
   items,
   isOpen,
   activeId,
   onToggleOpen,
   onSelect,
   onDelete,
-}: SavedCalculationsProps) {
+}: SavedCalculationsPanelProps) {
   return (
-    <aside className="w-full max-w-xs sm:max-w-[220px]">
-      {/* Toggle button */}
+    <div className="relative text-xs">
+      {/* Toggle button – neutral gray, similar to old styling */}
       <button
         type="button"
         onClick={onToggleOpen}
         className="
-          w-full flex items-center justify-between
-          rounded-md border border-gray-200 bg-white
-          px-3 py-2 text-xs sm:text-sm font-semibold text-gray-800
-          shadow-sm hover:bg-gray-50 active:scale-[0.98]
+          inline-flex items-center gap-1
+          px-3 py-1.5 rounded-md border border-gray-300
+          bg-white text-[11px] font-medium text-gray-800
+          shadow-sm
+          hover:bg-gray-100 active:scale-95
           transition
         "
       >
         <span>Saved calculations</span>
-        <span className="ml-2 text-[10px] text-gray-500">
-          {isOpen ? "Hide ▴" : "Show ▾"}
+        {items.length > 0 && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-800 text-white">
+            {items.length}
+          </span>
+        )}
+        <span className="text-[10px] text-gray-400">
+          {isOpen ? "Hide" : "Show"}
         </span>
       </button>
 
-      {isOpen && (
-        <div
-          className="
-            mt-2 rounded-md border border-gray-200 bg-white shadow-sm
-            max-h-80 overflow-y-auto text-xs
-          "
-        >
-          {/* "Current" row */}
-          <button
-            type="button"
-            onClick={() => onSelect(null)}
-            className={`
-              w-full flex items-center justify-between px-3 py-2 border-b border-gray-100
-              text-left hover:bg-gray-50 transition
-              ${activeId === null ? "bg-gray-50 font-semibold" : ""}
-            `}
-          >
-            <span>Current calculation</span>
-            {activeId === null && (
-              <span className="text-[10px] uppercase text-gray-500">
-                ACTIVE
-              </span>
-            )}
-          </button>
+      {/* Sliding / collapsing panel */}
+      <div
+        className={`
+          mt-2 overflow-hidden origin-left
+          transition-[max-width,opacity,transform] duration-300
+          ${
+            isOpen
+              ? "max-w-xs opacity-100 translate-x-0"
+              : "max-w-0 opacity-0 -translate-x-4 pointer-events-none"
+          }
+        `}
+      >
+        {/* Inner card – same kind of card styling as before */}
+        <div className="w-64 rounded-lg border border-gray-200 bg-white shadow-sm p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-gray-900">
+              Saved calculations
+            </span>
+          </div>
 
-          {/* Saved items */}
-          {items.length === 0 ? (
-            <div className="px-3 py-3 text-gray-500 text-[11px]">
-              No saved calculations yet. Use the{" "}
-              <span className="font-semibold">Save</span> button in the
-              calculator.
-            </div>
-          ) : (
-            items.map((item) => (
-              <div
-                key={item.id}
-                className={`
-                  flex items-center justify-between px-3 py-2 border-b last:border-b-0 border-gray-100
-                  ${activeId === item.id ? "bg-amber-50" : "bg-white"}
-                `}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelect(item.id)}
-                  className="flex-1 text-left text-[11px] sm:text-xs hover:text-gray-900"
+          <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+            {/* "Current calculation" pseudo-item */}
+            <button
+              type="button"
+              onClick={() => onSelect(null)}
+              className={`
+                w-full text-left px-2 py-1.5 rounded-md text-[11px]
+                border
+                ${
+                  activeId === null
+                    ? "bg-gray-900 text-white border-gray-900"
+                    : "bg-gray-50 text-gray-800 border-transparent hover:bg-gray-100"
+                }
+              `}
+            >
+              Current calculation
+            </button>
+
+            {items.length === 0 && (
+              <p className="text-[11px] text-gray-500 px-1 py-2">
+                Nothing saved yet. Use{" "}
+                <span className="font-medium">Save</span> after entering at
+                least one valid date range.
+              </p>
+            )}
+
+            {items.map((item) => {
+              const isActive = activeId === item.id;
+              const created = new Date(item.createdAt);
+              const createdLabel = created.toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              });
+
+              return (
+                <div
+                  key={item.id}
+                  className={`
+                    flex items-center gap-1 px-1 py-1 rounded-md group
+                    ${
+                      isActive
+                        ? "bg-gray-900 text-white"
+                        : "hover:bg-gray-100 text-gray-800"
+                    }
+                  `}
                 >
-                  <div className="font-semibold truncate">{item.id}</div>
-                  <div className="text-[10px] text-gray-500">
-                    {new Date(item.createdAt).toLocaleString()}
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(item.id)}
-                  className="
-                    ml-2 px-1.5 py-0.5 rounded
-                    text-[10px] text-red-600
-                    hover:bg-red-50 active:scale-95
-                  "
-                >
-                  ✕
-                </button>
-              </div>
-            ))
-          )}
+                  <button
+                    type="button"
+                    onClick={() => onSelect(item.id)}
+                    className="flex-1 text-left text-[11px] truncate"
+                  >
+                    <div className="font-semibold truncate">{item.id}</div>
+                    <div
+                      className={`
+                        text-[10px]
+                        ${isActive ? "text-gray-200" : "text-gray-500"}
+                      `}
+                    >
+                      {createdLabel}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(item.id)}
+                    className={`
+                      text-[10px] px-1.5 py-0.5 rounded-md
+                      ${
+                        isActive
+                          ? "text-gray-200 hover:bg-gray-800"
+                          : "text-gray-400 hover:text-red-600 hover:bg-red-50"
+                      }
+                    `}
+                    aria-label={`Delete ${item.id}`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      )}
-    </aside>
+      </div>
+    </div>
   );
 }
