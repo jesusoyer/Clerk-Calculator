@@ -135,6 +135,10 @@ function isInvalidDateInput(value: string): boolean {
   return parseShortDate(value) === null;
 }
 
+/**
+ * ✅ Duration between two dates, using UTC so DST / timezones
+ * can’t cause off-by-one errors.
+ */
 function getDurationDays(row: TimeRangeRow, mode: CalcMode): number {
   if (!row.start || !row.end) return 0;
 
@@ -142,12 +146,27 @@ function getDurationDays(row: TimeRangeRow, mode: CalcMode): number {
   const end = parseShortDate(row.end);
   if (!start || !end) return 0;
 
-  const diffMs = Math.abs(end.getTime() - start.getTime());
   const dayMs = 1000 * 60 * 60 * 24;
-  const baseDays = Math.floor(diffMs / dayMs);
+
+  // Use UTC midnight values for both dates
+  const startUTC = Date.UTC(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate()
+  );
+  const endUTC = Date.UTC(
+    end.getFullYear(),
+    end.getMonth(),
+    end.getDate()
+  );
+
+  const diffMs = Math.abs(endUTC - startUTC);
+
+  // round instead of floor in case of tiny floating-point jitter
+  const baseDays = Math.round(diffMs / dayMs);
 
   if (mode === "STATE_JAIL") {
-    // exclusive
+    // exclusive (difference in days)
     return baseDays > 0 ? baseDays : 0;
   }
 
