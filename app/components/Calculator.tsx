@@ -938,7 +938,7 @@ function BacktimeCard() {
                       : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  Backtime calculator
+                  Clerical calculator
                 </button>
                 <button
                   type="button"
