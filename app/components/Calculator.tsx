@@ -24,7 +24,6 @@ interface SavedCalculation {
 }
 
 type DateAdjustDirection = "add" | "subtract";
-type DateAdjustUnit = "days" | "months" | "years";
 
 const STORAGE_KEY = "clerk-calculator-state-v1";
 
@@ -70,8 +69,7 @@ function normalizeShortDateDisplay(value: string): string {
 }
 
 /**
- * Parse MM/DD/YY into a Date using a sliding 100-year window
- * ending at the current year.
+ * Parse MM/DD/YY into a Date using a sliding 100-year window ending at the current year.
  */
 function parseShortDate(input: string): Date | null {
   if (!input) return null;
@@ -108,9 +106,7 @@ function parseShortDate(input: string): Date | null {
   return date;
 }
 
-/**
- * Format a Date as MM/DD/YYYY (for the bottom combined expression)
- */
+/** Format a Date as MM/DD/YYYY */
 function formatDateFullYear(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
@@ -118,9 +114,7 @@ function formatDateFullYear(d: Date): string {
   return `${mm}/${dd}/${yyyy}`;
 }
 
-/**
- * Format a Date as "Wednesday, January 1, 2025"
- */
+/** Format a Date as "Wednesday, January 1, 2025" */
 function formatLongDate(d: Date): string {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -130,10 +124,7 @@ function formatLongDate(d: Date): string {
   }).format(d);
 }
 
-/**
- * Helper to decide if a given input should be treated as an invalid date
- * (used for showing inline error messages).
- */
+/** Helper to decide if an input should be treated as an invalid date */
 function isInvalidDateInput(value: string): boolean {
   if (!value) return false; // don't show error on empty
 
@@ -151,10 +142,7 @@ function isInvalidDateInput(value: string): boolean {
   return parseShortDate(value) === null;
 }
 
-/**
- * ✅ Duration between two dates, using UTC so DST / timezones
- * can’t cause off-by-one errors.
- */
+/** ✅ Duration between two dates, using UTC to avoid DST off-by-one */
 function getDurationDays(row: TimeRangeRow, mode: CalcMode): number {
   if (!row.start || !row.end) return 0;
 
@@ -164,7 +152,6 @@ function getDurationDays(row: TimeRangeRow, mode: CalcMode): number {
 
   const dayMs = 1000 * 60 * 60 * 24;
 
-  // Use UTC midnight values for both dates
   const startUTC = Date.UTC(
     start.getFullYear(),
     start.getMonth(),
@@ -177,16 +164,14 @@ function getDurationDays(row: TimeRangeRow, mode: CalcMode): number {
   );
 
   const diffMs = Math.abs(endUTC - startUTC);
-
-  // round instead of floor in case of tiny floating-point jitter
   const baseDays = Math.round(diffMs / dayMs);
 
   if (mode === "STATE_JAIL") {
-    // exclusive (difference in days)
+    // exclusive
     return baseDays > 0 ? baseDays : 0;
   }
 
-  // inclusive for TCJ/TDCJ
+  // inclusive
   const withExtra = baseDays + 1;
   return withExtra > 0 ? withExtra : 0;
 }
@@ -210,18 +195,16 @@ function formatTodayShort(): string {
 /** 📅 Second calculator: date adjust (add/subtract days/months/years) */
 function DateAdjustCalculator() {
   const [baseDate, setBaseDate] = useState("");
-  const [amount, setAmount] = useState("1");
-  const [unit, setUnit] = useState<DateAdjustUnit>("days");
   const [direction, setDirection] = useState<DateAdjustDirection>("add");
+  const [days, setDays] = useState("0");
+  const [months, setMonths] = useState("0");
+  const [years, setYears] = useState("0");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     from: string;
     operation: string;
     result: string;
   } | null>(null);
-
-  // quick-pick dropdown for amount 1–15
-  const [showAmountMenu, setShowAmountMenu] = useState(false);
 
   const handleFillTodayBase = () => {
     const today = formatTodayShort();
@@ -231,12 +214,27 @@ function DateAdjustCalculator() {
 
   const handleClear = () => {
     setBaseDate("");
-    setAmount("1");
-    setUnit("days");
     setDirection("add");
+    setDays("0");
+    setMonths("0");
+    setYears("0");
     setError(null);
     setResult(null);
   };
+
+  // Ctrl/Cmd + 0 clears the date-adjust calculator
+  useEffect(() => {
+    function onKeyDown(e: any) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        handleClear();
+      }
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }
+  }, []);
 
   const handleCalculate = () => {
     setError(null);
@@ -248,46 +246,50 @@ function DateAdjustCalculator() {
       return;
     }
 
-    const n = Number(amount);
-    if (!Number.isFinite(n)) {
-      setError("Please enter a valid numeric amount.");
-      return;
+    const d =
+      Number.isFinite(Number(days)) && Number(days) >= 0
+        ? Math.floor(Number(days))
+        : 0;
+    const m =
+      Number.isFinite(Number(months)) && Number(months) >= 0
+        ? Math.floor(Number(months))
+        : 0;
+    const y =
+      Number.isFinite(Number(years)) && Number(years) >= 0
+        ? Math.floor(Number(years))
+        : 0;
+
+    const sign = direction === "add" ? 1 : -1;
+
+    const target = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate()
+    );
+
+    if (d !== 0) {
+      target.setDate(target.getDate() + sign * d);
     }
-
-    const signed = direction === "add" ? n : -n;
-    let target: Date;
-
-    // local calendar math, so +1 day → next date
-    if (unit === "days") {
-      target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      target.setDate(target.getDate() + signed);
-    } else if (unit === "months") {
-      target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      target.setMonth(target.getMonth() + signed);
-    } else {
-      // years
-      target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      target.setFullYear(target.getFullYear() + signed);
+    if (m !== 0) {
+      target.setMonth(target.getMonth() + sign * m);
+    }
+    if (y !== 0) {
+      target.setFullYear(target.getFullYear() + sign * y);
     }
 
     const fromStr = `From ${formatLongDate(date)}`;
 
-    const absN = Math.abs(n);
-    const unitWord =
-      unit === "days"
-        ? absN === 1
-          ? "day"
-          : "days"
-        : unit === "months"
-        ? absN === 1
-          ? "month"
-          : "months"
-        : absN === 1
-        ? "year"
-        : "years";
+    const parts: string[] = [];
+    if (y) parts.push(`${y} ${y === 1 ? "year" : "years"}`);
+    if (m) parts.push(`${m} ${m === 1 ? "month" : "months"}`);
+    if (d) parts.push(`${d} ${d === 1 ? "day" : "days"}`);
 
     const verb = direction === "add" ? "Added" : "Subtracted";
-    const opStr = `${verb} ${absN} ${unitWord}`;
+    const opStr =
+      parts.length > 0
+        ? `${verb} ${parts.join(", ")}`
+        : `${verb} 0 days`;
+
     const resultStr = `Result: ${formatLongDate(target)}`;
 
     setResult({
@@ -298,187 +300,193 @@ function DateAdjustCalculator() {
   };
 
   return (
-    <div className="w-full flex flex-col items-center">
-      {/* Single inline row: base date, +/- , amount, unit, calculate */}
-      <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 mb-3">
-        {/* Base date with Today button */}
-        <div className="relative w-full max-w-[10rem]">
-          <button
-            type="button"
-            onClick={handleFillTodayBase}
-            className="
-              absolute left-1 top-1/2 -translate-y-1/2
-              px-1.5 py-0.5 rounded border
-              text-[10px] text-gray-700
-              bg-gray-100 hover:bg-gray-200
-              focus:outline-none focus:ring-1 focus:ring-gray-300
-            "
-          >
-            Today
-          </button>
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="MM/DD/YY"
-            aria-label="Base date"
-            value={baseDate}
-            onChange={(e) => {
-              setBaseDate(e.target.value);
-              setError(null);
-            }}
-            onBlur={() =>
-              setBaseDate((prev) => normalizeShortDateDisplay(prev))
-            }
-            className="
-              border rounded pl-10 pr-3 py-1.5
-              text-[11px] w-full text-center font-mono
-              placeholder:text-gray-500 placeholder:opacity-100
-              focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
-            "
-          />
-        </div>
-
-        {/* +/- toggle */}
-        <div className="inline-flex rounded-md border border-gray-200 bg-gray-100 p-0.5">
-          <button
-            type="button"
-            onClick={() => setDirection("add")}
-            className={`px-3 py-1 text-[11px] font-semibold rounded ${
-              direction === "add"
-                ? "bg-white shadow-sm text-gray-900"
-                : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            onClick={() => setDirection("subtract")}
-            className={`px-3 py-1 text-[11px] font-semibold rounded ${
-              direction === "subtract"
-                ? "bg-white shadow-sm text-gray-900"
-                : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            −
-          </button>
-        </div>
-
-        {/* Amount with quick-pick dropdown */}
-        <div className="relative">
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            onFocus={() => setShowAmountMenu(true)}
-            onBlur={() => {
-              setTimeout(() => setShowAmountMenu(false), 100);
-            }}
-            className="
-              w-16 border rounded px-2 py-1.5
-              text-[11px] text-center
-              focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
-            "
-          />
-
-          {showAmountMenu && (
-            <div
-              className="
-                absolute z-10 mt-1 w-16
-                max-h-48 overflow-auto
-                rounded-md border border-gray-200 bg-white shadow-lg
-              "
-            >
-              {Array.from({ length: 15 }, (_, i) => i + 1).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setAmount(String(v));
-                    setShowAmountMenu(false);
-                  }}
-                  className="
-                    w-full px-2 py-1 text-[11px] text-center
-                    hover:bg-gray-100
-                  "
-                >
-                  {v}
-                </button>
-              ))}
+    <div className="w-full flex flex-col items-center px-5 py-4">
+      <div className="w-full max-w-xl space-y-4">
+        {/* Single row: base date, +/- and days/months/years */}
+        <div className="w-full flex flex-wrap md:flex-nowrap items-end justify-center gap-4">
+          {/* Base date (smaller) */}
+          <div className="flex flex-col items-center">
+            <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+              Base date
+            </label>
+            <div className="relative w-28 sm:w-32">
+              <button
+                type="button"
+                onClick={handleFillTodayBase}
+                className="
+                  absolute left-1 top-1/2 -translate-y-1/2
+                  px-1.5 py-0.5 rounded border
+                  text-[10px] text-gray-700
+                  bg-gray-100 hover:bg-gray-200
+                  focus:outline-none focus:ring-1 focus:ring-gray-300
+                "
+              >
+                Today
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="MM/DD/YY"
+                value={baseDate}
+                onChange={(e) => {
+                  setBaseDate(e.target.value);
+                  setError(null);
+                }}
+                onBlur={() =>
+                  setBaseDate((prev) => normalizeShortDateDisplay(prev))
+                }
+                className="
+                  border rounded pl-10 pr-3 py-1.5
+                  text-[11px] w-full text-center font-mono
+                  placeholder:text-gray-500 placeholder:opacity-100
+                  focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
+                "
+              />
             </div>
-          )}
+          </div>
+
+          {/* plus/minus toggle */}
+          <div className="flex flex-col items-center">
+            <span className="block text-[11px] font-semibold text-gray-700 mb-1">
+              Direction
+            </span>
+            <div className="inline-flex rounded-md border border-gray-200 bg-gray-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => setDirection("add")}
+                className={`px-3 py-1 text-[11px] font-semibold rounded ${
+                  direction === "add"
+                    ? "bg-white shadow-sm text-gray-900"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={() => setDirection("subtract")}
+                className={`px-3 py-1 text-[11px] font-semibold rounded ${
+                  direction === "subtract"
+                    ? "bg-white shadow-sm text-gray-900"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                −
+              </button>
+            </div>
+          </div>
+
+          {/* Days */}
+          <div className="flex flex-col items-center">
+            <label className="block text-[11px] text-gray-700 mb-1">
+              Days
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={days}
+              onChange={(e) => setDays(e.target.value)}
+              className="
+                w-16 border rounded px-2 py-1.5
+                text-[11px] text-center
+                focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
+              "
+            />
+          </div>
+
+          {/* Months */}
+          <div className="flex flex-col items-center">
+            <label className="block text-[11px] text-gray-700 mb-1">
+              Months
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={months}
+              onChange={(e) => setMonths(e.target.value)}
+              className="
+                w-16 border rounded px-2 py-1.5
+                text-[11px] text-center
+                focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
+              "
+            />
+          </div>
+
+          {/* Years */}
+          <div className="flex flex-col items-center">
+            <label className="block text-[11px] text-gray-700 mb-1">
+              Years
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={years}
+              onChange={(e) => setYears(e.target.value)}
+              className="
+                w-16 border rounded px-2 py-1.5
+                text-[11px] text-center
+                focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
+              "
+            />
+          </div>
         </div>
 
-        {/* Unit select */}
-        <select
-          value={unit}
-          onChange={(e) => setUnit(e.target.value as DateAdjustUnit)}
-          className="
-            border rounded px-2 py-1.5 text-[11px]
-            focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
-          "
-        >
-          <option value="days">days</option>
-          <option value="months">months</option>
-          <option value="years">years</option>
-        </select>
-
-        {/* Calculate button */}
-        <button
-          type="button"
-          onClick={handleCalculate}
-          className="
-            px-3 sm:px-4 py-1.5 rounded-md border text-[11px] font-semibold whitespace-nowrap
-            bg-gray-900 text-white border-gray-900
-            hover:bg-gray-800
-            active:bg-gray-950
-            transition active:scale-95
-            focus:outline-none focus:ring-1 focus:ring-gray-400
-          "
-        >
-          Calculate
-        </button>
-      </div>
-
-      {/* Buttons under row: Clear */}
-      <div className="w-full max-w-xs flex justify-end gap-2 mb-2">
-        <button
-          type="button"
-          onClick={handleClear}
-          className="
-            px-3 py-1.5 rounded-md border text-[11px] font-semibold whitespace-nowrap
-            bg-red-100 text-red-700 border-red-200
-            hover:bg-red-400 hover:text-white hover:border-red-400
-            active:bg-red-500 active:border-red-500
-            transition active:scale-95
-            focus:outline-none focus:ring-1 focus:ring-red-200
-          "
-        >
-          Clear
-        </button>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <p className="text-[11px] text-red-600 text-center mb-1">
-          {error}
-        </p>
-      )}
-
-      {/* Result */}
-      {result && (
-        <div className="mt-2 text-center text-[12px] text-gray-900">
-          <p>{result.from}</p>
-          <p className="mt-1">{result.operation}</p>
-          <p className="mt-2 font-semibold">{result.result}</p>
+        {/* Buttons below */}
+        <div className="w-full flex justify-center gap-3 mt-2">
+          <button
+            type="button"
+            onClick={handleClear}
+            className="
+              px-4 py-1.5 rounded-md border text-[11px] font-semibold whitespace-nowrap
+              bg-red-100 text-red-700 border-red-200
+              hover:bg-red-400 hover:text-white hover:border-red-400
+              active:bg-red-500 active:border-red-500
+              transition active:scale-95
+              focus:outline-none focus:ring-1 focus:ring-red-200
+            "
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={handleCalculate}
+            className="
+              px-5 py-1.5 rounded-md border text-[12px] font-semibold whitespace-nowrap
+              bg-gray-900 text-white border-gray-900
+              hover:bg-gray-800
+              active:bg-gray-950
+              transition active:scale-95
+              focus:outline-none focus:ring-1 focus:ring-gray-400
+            "
+          >
+            Calculate
+          </button>
         </div>
-      )}
+
+        {/* Error */}
+        {error && (
+          <p className="text-[11px] text-red-600 text-center mb-1">
+            {error}
+          </p>
+        )}
+
+        {/* Result */}
+        {result && (
+          <div className="mt-2 text-center text-[12px] text-gray-900">
+            <p>{result.from}</p>
+            <p className="mt-1">{result.operation}</p>
+            <p className="mt-2 font-semibold">{result.result}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
+/* ---------- BacktimeCard and export (unchanged logic) ---------- */
 
 function BacktimeCard() {
   const [rows, setRows] = useState<TimeRangeRow[]>([
@@ -498,11 +506,9 @@ function BacktimeCard() {
   const [saveBanner, setSaveBanner] = useState<string | null>(null);
   const bannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Saved list UI state
   const [savedOpen, setSavedOpen] = useState(false);
-  const [activeSavedId, setActiveSavedId] = useState<string | null>(null); // null = current live calc
+  const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
 
-  // Snapshot of the "current" calc when you first open a saved one
   const liveStateRef = useRef<{
     rows: TimeRangeRow[];
     mode: CalcMode;
@@ -512,7 +518,6 @@ function BacktimeCard() {
   const startRefs = useRef<Array<HTMLInputElement | null>>([]);
   const endRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-  // Load from localStorage
   useEffect(() => {
     try {
       if (typeof window === "undefined") return;
@@ -560,7 +565,6 @@ function BacktimeCard() {
     }
   }, []);
 
-  // Save to localStorage
   useEffect(() => {
     try {
       if (typeof window === "undefined") return;
@@ -576,7 +580,6 @@ function BacktimeCard() {
     }
   }, [rows, mode, identifier, savedCalculations]);
 
-  // Cleanup banner timeout on unmount
   useEffect(() => {
     return () => {
       if (bannerTimeoutRef.current) {
@@ -590,15 +593,14 @@ function BacktimeCard() {
     0
   );
 
-  // Build the combined expression string using full 4-digit years
   const rangeParts: string[] = [];
   rows.forEach((row) => {
     const startDate = parseShortDate(row.start);
     const endDate = parseShortDate(row.end);
     if (!startDate || !endDate) return;
 
-    const startStr = formatDateFullYear(startDate); // MM/DD/YYYY
-    const endStr = formatDateFullYear(endDate); // MM/DD/YYYY
+    const startStr = formatDateFullYear(startDate);
+    const endStr = formatDateFullYear(endDate);
     rangeParts.push(`(${startStr} - ${endStr})`);
   });
 
@@ -675,7 +677,6 @@ function BacktimeCard() {
     }
   }, []);
 
-  // Keyboard shortcut: Ctrl+0 / Cmd+0 to clear
   useEffect(() => {
     function onKeyDown(e: any) {
       if ((e.ctrlKey || e.metaKey) && e.key === "0") {
@@ -690,7 +691,6 @@ function BacktimeCard() {
     }
   }, [handleClearAll]);
 
-  // Only keep Tab behavior; no Enter-based focus/add-row
   function handleEndKeyDown(
     e: KeyboardEvent<HTMLInputElement>,
     rowIndex: number
@@ -719,7 +719,7 @@ function BacktimeCard() {
         document.body.removeChild(textarea);
       }
       setCopied(true);
-      setTimeout(() => setCopied(false), 1000); // ~1 second
+      setTimeout(() => setCopied(false), 1000);
     } catch {
       // ignore
     }
@@ -772,11 +772,9 @@ function BacktimeCard() {
       setSaveBanner(null);
     }, 3000);
 
-    // Open the list once there's something to show
     setSavedOpen(true);
   }
 
-  // Update existing saved calculation when one is active
   function handleUpdateCurrent() {
     if (activeSavedId === null) {
       handleSaveCurrent();
@@ -830,7 +828,6 @@ function BacktimeCard() {
     }, 3000);
   }
 
-  // Handle selecting an item from SavedCalculations
   function handleSelectSaved(id: string | null) {
     if (id === null) {
       setActiveSavedId(null);
@@ -886,7 +883,6 @@ function BacktimeCard() {
   return (
     <div className="w-full flex justify-center">
       <div className="w-full max-w-5xl flex flex-col md:flex-row items-start gap-2">
-        {/* Saved Calculations only in Backtime mode */}
         {viewMode === "BACKTIME" && (
           <div className="w-full md:w-auto md:flex-shrink-0">
             <SavedCalculationsPanel
@@ -900,15 +896,7 @@ function BacktimeCard() {
           </div>
         )}
 
-        {/* Calculator card */}
-        <div
-          className={
-            "w-full md:flex-1 flex " +
-            (viewMode === "DATE_ADJUST"
-              ? "justify-center"
-              : "justify-center md:justify-start")
-          }
-        >
+        <div className="w-full md:flex-1 flex justify-center md:justify-start">
           <div
             className="
               relative w-full md:max-w-lg
@@ -919,14 +907,12 @@ function BacktimeCard() {
               flex flex-col items-center
             "
           >
-            {/* Success banner */}
             {saveBanner && (
               <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-4 py-2 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 text-[12px] shadow-sm">
                 {saveBanner}
               </div>
             )}
 
-            {/* View toggle: Backtime vs Date adjust */}
             <div className="w-full mb-3 flex justify-center">
               <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5">
                 <button
@@ -938,7 +924,7 @@ function BacktimeCard() {
                       : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  Clerical calculator
+                  Backtime calculator
                 </button>
                 <button
                   type="button"
@@ -956,7 +942,6 @@ function BacktimeCard() {
 
             {viewMode === "BACKTIME" ? (
               <>
-                {/* Identifier */}
                 <div className="w-full mb-2 flex flex-col items-center">
                   <label className="block text-[11px] font-semibold text-gray-700 mb-1 text-center">
                     Identifier (optional)
@@ -978,7 +963,6 @@ function BacktimeCard() {
                   )}
                 </div>
 
-                {/* Mode toggle */}
                 <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3 mb-4">
                   <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
                     <button
@@ -1008,7 +992,6 @@ function BacktimeCard() {
                   </div>
                 </div>
 
-                {/* Rows */}
                 <div className="w-full mt-2 mb-4 space-y-5">
                   {rows.map((row, index) => {
                     const days = getDurationDays(row, mode);
@@ -1028,8 +1011,7 @@ function BacktimeCard() {
 
                     return (
                       <div key={row.id} className="space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:flex-nowrap items-center justify-center gap-2 sm:gap-3">
-                          {/* Start date */}
+                        <div className="flex flex-col sm:flex-row sm:flex-nowrap items-center justify.center gap-2 sm:gap-3">
                           <input
                             type="text"
                             inputMode="numeric"
@@ -1051,7 +1033,6 @@ function BacktimeCard() {
                             }`}
                           />
 
-                          {/* End date with Today button */}
                           <div className="relative w-full sm:w-[9.5rem]">
                             <button
                               type="button"
@@ -1144,7 +1125,6 @@ function BacktimeCard() {
                   })}
                 </div>
 
-                {/* Save / Update + Clear row */}
                 <div className="w-full flex justify-end gap-2 mt-1">
                   {isEditingSaved ? (
                     <button
@@ -1194,7 +1174,6 @@ function BacktimeCard() {
                   </button>
                 </div>
 
-                {/* Combined total + expression */}
                 <div className="w-full pt-3 border-t border-gray-100 mt-4 flex flex-col items-center gap-2">
                   <span className="text-[11px] font-semibold text-gray-700 text-center px-2">
                     Combined total (
