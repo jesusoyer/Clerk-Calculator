@@ -14,6 +14,7 @@ interface TimeRangeRow {
 }
 
 type CalcMode = "STATE_JAIL" | "TCJ_TDCJ";
+type ViewMode = "BACKTIME" | "DATE_ADJUST";
 
 interface SavedCalculation {
   label: string;
@@ -21,6 +22,9 @@ interface SavedCalculation {
   mode: CalcMode;
   createdAt: number;
 }
+
+type DateAdjustDirection = "add" | "subtract";
+type DateAdjustUnit = "days" | "months" | "years";
 
 const STORAGE_KEY = "clerk-calculator-state-v1";
 
@@ -115,6 +119,18 @@ function formatDateFullYear(d: Date): string {
 }
 
 /**
+ * Format a Date as "Wednesday, January 1, 2025"
+ */
+function formatLongDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(d);
+}
+
+/**
  * Helper to decide if a given input should be treated as an invalid date
  * (used for showing inline error messages).
  */
@@ -182,6 +198,288 @@ function formatDays(days: number): string {
   return `${withCommas} ${label}`;
 }
 
+/** 🗓️ Format today's date as MM/DD/YY */
+function formatTodayShort(): string {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const yy = String(now.getFullYear() % 100).padStart(2, "0");
+  return `${mm}/${dd}/${yy}`;
+}
+
+/** 📅 Second calculator: date adjust (add/subtract days/months/years) */
+function DateAdjustCalculator() {
+  const [baseDate, setBaseDate] = useState("");
+  const [amount, setAmount] = useState("1");
+  const [unit, setUnit] = useState<DateAdjustUnit>("days");
+  const [direction, setDirection] = useState<DateAdjustDirection>("add");
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    from: string;
+    operation: string;
+    result: string;
+  } | null>(null);
+
+  // quick-pick dropdown for amount 1–15
+  const [showAmountMenu, setShowAmountMenu] = useState(false);
+
+  const handleFillTodayBase = () => {
+    const today = formatTodayShort();
+    setBaseDate(today);
+    setError(null);
+  };
+
+  const handleClear = () => {
+    setBaseDate("");
+    setAmount("1");
+    setUnit("days");
+    setDirection("add");
+    setError(null);
+    setResult(null);
+  };
+
+  const handleCalculate = () => {
+    setError(null);
+    setResult(null);
+
+    const date = parseShortDate(baseDate);
+    if (!date) {
+      setError("Please enter a valid base date in MM/DD/YY format.");
+      return;
+    }
+
+    const n = Number(amount);
+    if (!Number.isFinite(n)) {
+      setError("Please enter a valid numeric amount.");
+      return;
+    }
+
+    const signed = direction === "add" ? n : -n;
+    let target: Date;
+
+    // local calendar math, so +1 day → next date
+    if (unit === "days") {
+      target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      target.setDate(target.getDate() + signed);
+    } else if (unit === "months") {
+      target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      target.setMonth(target.getMonth() + signed);
+    } else {
+      // years
+      target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      target.setFullYear(target.getFullYear() + signed);
+    }
+
+    const fromStr = `From ${formatLongDate(date)}`;
+
+    const absN = Math.abs(n);
+    const unitWord =
+      unit === "days"
+        ? absN === 1
+          ? "day"
+          : "days"
+        : unit === "months"
+        ? absN === 1
+          ? "month"
+          : "months"
+        : absN === 1
+        ? "year"
+        : "years";
+
+    const verb = direction === "add" ? "Added" : "Subtracted";
+    const opStr = `${verb} ${absN} ${unitWord}`;
+    const resultStr = `Result: ${formatLongDate(target)}`;
+
+    setResult({
+      from: fromStr,
+      operation: opStr,
+      result: resultStr,
+    });
+  };
+
+  return (
+    <div className="w-full flex flex-col items-center">
+      {/* Single inline row: base date, +/- , amount, unit, calculate */}
+      <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 mb-3">
+        {/* Base date with Today button */}
+        <div className="relative w-full max-w-[10rem]">
+          <button
+            type="button"
+            onClick={handleFillTodayBase}
+            className="
+              absolute left-1 top-1/2 -translate-y-1/2
+              px-1.5 py-0.5 rounded border
+              text-[10px] text-gray-700
+              bg-gray-100 hover:bg-gray-200
+              focus:outline-none focus:ring-1 focus:ring-gray-300
+            "
+          >
+            Today
+          </button>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="MM/DD/YY"
+            aria-label="Base date"
+            value={baseDate}
+            onChange={(e) => {
+              setBaseDate(e.target.value);
+              setError(null);
+            }}
+            onBlur={() =>
+              setBaseDate((prev) => normalizeShortDateDisplay(prev))
+            }
+            className="
+              border rounded pl-10 pr-3 py-1.5
+              text-[11px] w-full text-center font-mono
+              placeholder:text-gray-500 placeholder:opacity-100
+              focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
+            "
+          />
+        </div>
+
+        {/* +/- toggle */}
+        <div className="inline-flex rounded-md border border-gray-200 bg-gray-100 p-0.5">
+          <button
+            type="button"
+            onClick={() => setDirection("add")}
+            className={`px-3 py-1 text-[11px] font-semibold rounded ${
+              direction === "add"
+                ? "bg-white shadow-sm text-gray-900"
+                : "text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => setDirection("subtract")}
+            className={`px-3 py-1 text-[11px] font-semibold rounded ${
+              direction === "subtract"
+                ? "bg-white shadow-sm text-gray-900"
+                : "text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            −
+          </button>
+        </div>
+
+        {/* Amount with quick-pick dropdown */}
+        <div className="relative">
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            onFocus={() => setShowAmountMenu(true)}
+            onBlur={() => {
+              setTimeout(() => setShowAmountMenu(false), 100);
+            }}
+            className="
+              w-16 border rounded px-2 py-1.5
+              text-[11px] text-center
+              focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
+            "
+          />
+
+          {showAmountMenu && (
+            <div
+              className="
+                absolute z-10 mt-1 w-16
+                max-h-48 overflow-auto
+                rounded-md border border-gray-200 bg-white shadow-lg
+              "
+            >
+              {Array.from({ length: 15 }, (_, i) => i + 1).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setAmount(String(v));
+                    setShowAmountMenu(false);
+                  }}
+                  className="
+                    w-full px-2 py-1 text-[11px] text-center
+                    hover:bg-gray-100
+                  "
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Unit select */}
+        <select
+          value={unit}
+          onChange={(e) => setUnit(e.target.value as DateAdjustUnit)}
+          className="
+            border rounded px-2 py-1.5 text-[11px]
+            focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
+          "
+        >
+          <option value="days">days</option>
+          <option value="months">months</option>
+          <option value="years">years</option>
+        </select>
+
+        {/* Calculate button */}
+        <button
+          type="button"
+          onClick={handleCalculate}
+          className="
+            px-3 sm:px-4 py-1.5 rounded-md border text-[11px] font-semibold whitespace-nowrap
+            bg-gray-900 text-white border-gray-900
+            hover:bg-gray-800
+            active:bg-gray-950
+            transition active:scale-95
+            focus:outline-none focus:ring-1 focus:ring-gray-400
+          "
+        >
+          Calculate
+        </button>
+      </div>
+
+      {/* Buttons under row: Clear */}
+      <div className="w-full max-w-xs flex justify-end gap-2 mb-2">
+        <button
+          type="button"
+          onClick={handleClear}
+          className="
+            px-3 py-1.5 rounded-md border text-[11px] font-semibold whitespace-nowrap
+            bg-red-100 text-red-700 border-red-200
+            hover:bg-red-400 hover:text-white hover:border-red-400
+            active:bg-red-500 active:border-red-500
+            transition active:scale-95
+            focus:outline-none focus:ring-1 focus:ring-red-200
+          "
+        >
+          Clear
+        </button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <p className="text-[11px] text-red-600 text-center mb-1">
+          {error}
+        </p>
+      )}
+
+      {/* Result */}
+      {result && (
+        <div className="mt-2 text-center text-[12px] text-gray-900">
+          <p>{result.from}</p>
+          <p className="mt-1">{result.operation}</p>
+          <p className="mt-2 font-semibold">{result.result}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BacktimeCard() {
   const [rows, setRows] = useState<TimeRangeRow[]>([
     { id: Date.now(), start: "", end: "" },
@@ -190,10 +488,11 @@ function BacktimeCard() {
   const [copied, setCopied] = useState(false);
   const [showRanges, setShowRanges] = useState(true);
 
+  const [viewMode, setViewMode] = useState<ViewMode>("BACKTIME");
+
   const [identifier, setIdentifier] = useState("");
-  const [savedCalculations, setSavedCalculations] = useState<SavedCalculation[]>(
-    []
-  );
+  const [savedCalculations, setSavedCalculations] =
+    useState<SavedCalculation[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [saveBanner, setSaveBanner] = useState<string | null>(null);
@@ -391,33 +690,12 @@ function BacktimeCard() {
     }
   }, [handleClearAll]);
 
-  function handleStartKeyDown(
-    e: KeyboardEvent<HTMLInputElement>,
-    rowIndex: number
-  ) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const end = endRefs.current[rowIndex];
-      if (end) end.focus();
-    }
-  }
-
+  // Only keep Tab behavior; no Enter-based focus/add-row
   function handleEndKeyDown(
     e: KeyboardEvent<HTMLInputElement>,
     rowIndex: number
   ) {
     const isLastRow = rowIndex === rows.length - 1;
-
-    if (e.key === "Enter") {
-      e.preventDefault();
-
-      if (isLastRow) {
-        addRowAndFocusNext();
-      } else {
-        const nextStart = startRefs.current[rowIndex + 1];
-        if (nextStart) nextStart.focus();
-      }
-    }
 
     if (e.key === "Tab" && !e.shiftKey && isLastRow) {
       e.preventDefault();
@@ -501,7 +779,6 @@ function BacktimeCard() {
   // Update existing saved calculation when one is active
   function handleUpdateCurrent() {
     if (activeSavedId === null) {
-      // Fallback – shouldn't happen under normal UI, but just in case
       handleSaveCurrent();
       return;
     }
@@ -514,10 +791,8 @@ function BacktimeCard() {
     }
 
     const trimmed = identifier.trim();
-    // If identifier is empty, keep the original label
     const proposedLabel = trimmed || activeSavedId;
 
-    // Disallow duplicates except for the one we're editing
     const duplicate = savedCalculations.some(
       (c) =>
         c.label.toLowerCase() === proposedLabel.toLowerCase() &&
@@ -537,7 +812,6 @@ function BacktimeCard() {
             label: proposedLabel,
             rows: snapshotRows,
             mode,
-            // keep original createdAt
           }
         : c
     );
@@ -559,7 +833,6 @@ function BacktimeCard() {
   // Handle selecting an item from SavedCalculations
   function handleSelectSaved(id: string | null) {
     if (id === null) {
-      // "Current calculation"
       setActiveSavedId(null);
       if (liveStateRef.current) {
         setRows(liveStateRef.current.rows);
@@ -572,7 +845,6 @@ function BacktimeCard() {
     const found = savedCalculations.find((c) => c.label === id);
     if (!found) return;
 
-    // On first switch away from live state, remember it
     if (activeSavedId === null) {
       liveStateRef.current = {
         rows,
@@ -611,24 +883,32 @@ function BacktimeCard() {
 
   const isEditingSaved = activeSavedId !== null;
 
-  // 🔹 Layout: Saved panel and calculator side-by-side, very close
   return (
     <div className="w-full flex justify-center">
       <div className="w-full max-w-5xl flex flex-col md:flex-row items-start gap-2">
-        {/* Saved Calculations panel – right next to the calculator */}
-        <div className="w-full md:w-auto md:flex-shrink-0">
-          <SavedCalculationsPanel
-            items={savedSummaries}
-            isOpen={savedOpen}
-            activeId={activeSavedId}
-            onToggleOpen={() => setSavedOpen((prev) => !prev)}
-            onSelect={handleSelectSaved}
-            onDelete={handleDeleteSaved}
-          />
-        </div>
+        {/* Saved Calculations only in Backtime mode */}
+        {viewMode === "BACKTIME" && (
+          <div className="w-full md:w-auto md:flex-shrink-0">
+            <SavedCalculationsPanel
+              items={savedSummaries}
+              isOpen={savedOpen}
+              activeId={activeSavedId}
+              onToggleOpen={() => setSavedOpen((prev) => !prev)}
+              onSelect={handleSelectSaved}
+              onDelete={handleDeleteSaved}
+            />
+          </div>
+        )}
 
         {/* Calculator card */}
-        <div className="w-full md:flex-1 flex justify-center md:justify-start">
+        <div
+          className={
+            "w-full md:flex-1 flex " +
+            (viewMode === "DATE_ADJUST"
+              ? "justify-center"
+              : "justify-center md:justify-start")
+          }
+        >
           <div
             className="
               relative w-full md:max-w-lg
@@ -646,270 +926,352 @@ function BacktimeCard() {
               </div>
             )}
 
-            {/* Identifier */}
-            <div className="w-full mb-2 flex flex-col items-center">
-              <label className="block text-[11px] font-semibold text-gray-700 mb-1 text-center">
-                Identifier (optional)
-              </label>
-              <input
-                type="text"
-                value={identifier}
-                onChange={(e) => {
-                  setIdentifier(e.target.value);
-                  setSaveError(null);
-                }}
-                placeholder='e.g. "Smith cause #1234"'
-                className="w-full sm:w-72 max-w-xs border rounded px-3 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
-              />
-              {saveError && (
-                <p className="mt-1 text-[11px] text-red-600 text-center">
-                  {saveError}
-                </p>
-              )}
-            </div>
-
-            {/* Mode toggle */}
-            <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3 mb-4">
-              <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+            {/* View toggle: Backtime vs Date adjust */}
+            <div className="w-full mb-3 flex justify-center">
+              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5">
                 <button
                   type="button"
-                  tabIndex={-1}
-                  onClick={() => setMode("STATE_JAIL")}
-                  className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
-                    mode === "STATE_JAIL"
-                      ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
-                      : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
+                  onClick={() => setViewMode("BACKTIME")}
+                  className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition ${
+                    viewMode === "BACKTIME"
+                      ? "bg-white shadow-sm text-gray-900"
+                      : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  STATE JAIL
+                  Backtime calculator
                 </button>
                 <button
                   type="button"
-                  tabIndex={-1}
-                  onClick={() => setMode("TCJ_TDCJ")}
-                  className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
-                    mode === "TCJ_TDCJ"
-                      ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
-                      : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
+                  onClick={() => setViewMode("DATE_ADJUST")}
+                  className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition ${
+                    viewMode === "DATE_ADJUST"
+                      ? "bg-white shadow-sm text-gray-900"
+                      : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  TCJ/TDCJ/ACOP
+                  Date adjust
                 </button>
               </div>
             </div>
 
-            {/* Rows */}
-            <div className="w-full mt-2 mb-4 space-y-5">
-              {rows.map((row, index) => {
-                const days = getDurationDays(row, mode);
-                const display = row.start && row.end ? formatDays(days) : "—";
+            {viewMode === "BACKTIME" ? (
+              <>
+                {/* Identifier */}
+                <div className="w-full mb-2 flex flex-col items-center">
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1 text-center">
+                    Identifier (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => {
+                      setIdentifier(e.target.value);
+                      setSaveError(null);
+                    }}
+                    placeholder='e.g. "Smith cause #1234"'
+                    className="w-full sm:w-72 max-w-xs border rounded px-3 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500"
+                  />
+                  {saveError && (
+                    <p className="mt-1 text-[11px] text-red-600 text-center">
+                      {saveError}
+                    </p>
+                  )}
+                </div>
 
-                const isLast = index === rows.length - 1;
-                const isFirst = index === 0;
-                const rowComplete = !!(row.start && row.end);
-
-                const showRowControls =
-                  (rows.length === 1 && isFirst && rowComplete) ||
-                  (rows.length > 1 && isLast);
-
-                const startInvalid = isInvalidDateInput(row.start);
-                const endInvalid = isInvalidDateInput(row.end);
-
-                return (
-                  <div key={row.id} className="space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:flex-nowrap items-center justify-center gap-2 sm:gap-3">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="MM/DD/YY"
-                        value={row.start}
-                        onChange={(e) =>
-                          updateRow(row.id, "start", e.target.value)
-                        }
-                        onBlur={() => normalizeRowField(row.id, "start")}
-                        onKeyDown={(e) => handleStartKeyDown(e, index)}
-                        ref={(el) => {
-                          startRefs.current[index] = el;
-                        }}
-                        className={`border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-500 placeholder:opacity-100 focus:outline-none focus:ring-1 ${
-                          startInvalid
-                            ? "border-red-400 focus:ring-red-400 focus:border-red-500"
-                            : "border-gray-300 focus:ring-gray-400 focus:border-gray-500"
-                        }`}
-                      />
-
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="MM/DD/YY"
-                        value={row.end}
-                        onChange={(e) =>
-                          updateRow(row.id, "end", e.target.value)
-                        }
-                        onBlur={() => normalizeRowField(row.id, "end")}
-                        onKeyDown={(e) => handleEndKeyDown(e, index)}
-                        ref={(el) => {
-                          endRefs.current[index] = el;
-                        }}
-                        className={`border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-500 placeholder:opacity-100 focus:outline-none focus:ring-1 ${
-                          endInvalid
-                            ? "border-red-400 focus:ring-red-400 focus:border-red-500"
-                            : "border-gray-300 focus:ring-gray-400 focus:border-gray-500"
-                        }`}
-                      />
-
-                      <div className="flex items-center gap-1">
-                        <span className="text-[11px] font-semibold text-gray-700">
-                          =
-                        </span>
-                        <span className="min-w-[70px] text-[11px] font-semibold text-gray-900 text-center">
-                          {display}
-                        </span>
-                      </div>
-                    </div>
-
-                    {(startInvalid || endInvalid) && (
-                      <p className="text-[10px] text-red-600 text-center">
-                        Please enter a valid date in{" "}
-                        <span className="font-semibold">MM/DD/YY</span> format
-                        (e.g., 01/09/24). Single-digit months should be written
-                        as 01–09.
-                      </p>
-                    )}
-
-                    {showRowControls && (
-                      <div className="w-full flex justify-center mt-2">
-                        <div className="flex flex-wrap justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={addRow}
-                            className="px-3 py-1.5 rounded-md border border-gray-300 text-[11px] font-semibold text-gray-900 bg-white hover:bg-gray-100 whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
-                          >
-                            + Add row
-                          </button>
-                          <button
-                            type="button"
-                            onClick={removeLastRow}
-                            className="px-3 py-1.5 rounded-md border border-gray-300 text-[11px] font-semibold text-gray-900 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
-                          >
-                            − Remove row
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                {/* Mode toggle */}
+                <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3 mb-4">
+                  <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setMode("STATE_JAIL")}
+                      className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
+                        mode === "STATE_JAIL"
+                          ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
+                          : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
+                      }`}
+                    >
+                      STATE JAIL
+                    </button>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setMode("TCJ_TDCJ")}
+                      className={`px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
+                        mode === "TCJ_TDCJ"
+                          ? "bg-gray-900 text-white border-gray-900 shadow-sm active:bg-gray-800"
+                          : "bg-white text-gray-900 border-gray-300 hover:bg-gray-100 active:bg-gray-200"
+                      }`}
+                    >
+                      TCJ/TDCJ/ACOP
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
 
-            {/* Save / Update + Clear row */}
-            <div className="w-full flex justify-end gap-2 mt-1">
-              {isEditingSaved ? (
-                <button
-                  type="button"
-                  onClick={handleUpdateCurrent}
-                  className="
-                    px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
-                    bg-amber-50 text-amber-800 border-amber-200
-                    hover:bg-amber-200 hover:border-amber-300
-                    active:bg-amber-300 active:border-amber-400
-                    transition active:scale-95
-                    focus:outline-none focus:ring-1 focus:ring-amber-200
-                  "
-                >
-                  Update
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleSaveCurrent}
-                  className="
-                    px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
-                    bg-amber-50 text-amber-800 border-amber-200
-                    hover:bg-amber-200 hover:border-amber-300
-                    active:bg-amber-300 active:border-amber-400
-                    transition active:scale-95
-                    focus:outline-none focus:ring-1 focus:ring-amber-200
-                  "
-                >
-                  Save
-                </button>
-              )}
+                {/* Rows */}
+                <div className="w-full mt-2 mb-4 space-y-5">
+                  {rows.map((row, index) => {
+                    const days = getDurationDays(row, mode);
+                    const display =
+                      row.start && row.end ? formatDays(days) : "—";
 
-              <button
-                type="button"
-                onClick={handleClearAll}
-                className="
-                  px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
-                  bg-red-100 text-red-700 border-red-200
-                  hover:bg-red-400 hover:text-white hover:border-red-400
-                  active:bg-red-500 active:border-red-500
-                  transition active:scale-95
-                  focus:outline-none focus:ring-1 focus:ring-red-200
-                "
-              >
-                Clear
-              </button>
-            </div>
+                    const isLast = index === rows.length - 1;
+                    const isFirst = index === 0;
+                    const rowComplete = !!(row.start && row.end);
 
-            {/* Combined total + expression */}
-            <div className="w-full pt-3 border-t border-gray-100 mt-4 flex flex-col items-center gap-2">
-              <span className="text-[11px] font-semibold text-gray-700 text-center px-2">
-                Combined total (
-                {mode === "STATE_JAIL" ? "State jail" : "TCJ/TDCJ/ACOP"})
-              </span>
-              <span className="inline-flex items-center justify-center px-6 py-2 rounded-full bg-gray-900 text-white text-[13px] font-semibold whitespace-nowrap">
-                {formatDays(totalDays)}
-              </span>
+                    const showRowControls =
+                      (rows.length === 1 && isFirst && rowComplete) ||
+                      (rows.length > 1 && isLast);
 
-              {/* Toggle show/hide of the breakdown section */}
-              {combinedExpression && (
-                <button
-                  type="button"
-                  onClick={() => setShowRanges((prev) => !prev)}
-                  className="mt-1 text-[11px] text-gray-500 hover:text-gray-700 underline decoration-dotted"
-                >
-                  {showRanges ? "Hide ranges" : "Show ranges"}
-                </button>
-              )}
+                    const startInvalid = isInvalidDateInput(row.start);
+                    const endInvalid = isInvalidDateInput(row.end);
 
-              {/* Breakdown + copy button */}
-              {combinedExpression && showRanges && (
-                <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 px-2 text-center">
-                  <span className="text-[12px] text-gray-900 font-semibold">
-                    {combinedExpression}
-                  </span>
+                    return (
+                      <div key={row.id} className="space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:flex-nowrap items-center justify-center gap-2 sm:gap-3">
+                          {/* Start date */}
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="MM/DD/YY"
+                            value={row.start}
+                            onChange={(e) =>
+                              updateRow(row.id, "start", e.target.value)
+                            }
+                            onBlur={() =>
+                              normalizeRowField(row.id, "start")
+                            }
+                            ref={(el) => {
+                              startRefs.current[index] = el;
+                            }}
+                            className={`border rounded px-3 py-1.5 text-[11px] w-full sm:w-[9.5rem] text-center font-mono placeholder:text-gray-500 placeholder:opacity-100 focus:outline-none focus:ring-1 ${
+                              startInvalid
+                                ? "border-red-400 focus:ring-red-400 focus:border-red-500"
+                                : "border-gray-300 focus:ring-gray-400 focus:border-gray-500"
+                            }`}
+                          />
+
+                          {/* End date with Today button */}
+                          <div className="relative w-full sm:w-[9.5rem]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const today = formatTodayShort();
+                                setRows((prev) =>
+                                  prev.map((r) =>
+                                    r.id === row.id
+                                      ? { ...r, end: today }
+                                      : r
+                                  )
+                                );
+                              }}
+                              className="
+                                absolute left-1 top-1/2 -translate-y-1/2
+                                px-1.5 py-0.5 rounded border
+                                text-[10px] text-gray-700
+                                bg-gray-100 hover:bg-gray-200
+                                focus:outline-none focus:ring-1 focus:ring-gray-300
+                              "
+                            >
+                              Today
+                            </button>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="MM/DD/YY"
+                              value={row.end}
+                              onChange={(e) =>
+                                updateRow(row.id, "end", e.target.value)
+                              }
+                              onBlur={() =>
+                                normalizeRowField(row.id, "end")
+                              }
+                              onKeyDown={(e) =>
+                                handleEndKeyDown(e, index)
+                              }
+                              ref={(el) => {
+                                endRefs.current[index] = el;
+                              }}
+                              className={`border rounded pl-10 pr-3 py-1.5 text-[11px] w-full text-center font-mono placeholder:text-gray-500 placeholder:opacity-100 focus:outline-none focus:ring-1 ${
+                                endInvalid
+                                  ? "border-red-400 focus:ring-red-400 focus:border-red-500"
+                                  : "border-gray-300 focus:ring-gray-400 focus:border-gray-500"
+                              }`}
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] font-semibold text-gray-700">
+                              =
+                            </span>
+                            <span className="min-w-[70px] text-[11px] font-semibold text-gray-900 text-center">
+                              {display}
+                            </span>
+                          </div>
+                        </div>
+
+                        {(startInvalid || endInvalid) && (
+                          <p className="text-[10px] text-red-600 text-center">
+                            Please enter a valid date in{" "}
+                            <span className="font-semibold">MM/DD/YY</span>{" "}
+                            format (e.g., 01/09/24). Single-digit months should
+                            be written as 01–09.
+                          </p>
+                        )}
+
+                        {showRowControls && (
+                          <div className="w-full flex justify-center mt-2">
+                            <div className="flex flex-wrap justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={addRow}
+                                className="px-3 py-1.5 rounded-md border border-gray-300 text-[11px] font-semibold text-gray-900 bg-white hover:bg-gray-100 whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                              >
+                                + Add row
+                              </button>
+                              <button
+                                type="button"
+                                onClick={removeLastRow}
+                                className="px-3 py-1.5 rounded-md border border-gray-300 text-[11px] font-semibold text-gray-900 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap transition active:scale-95 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                              >
+                                − Remove row
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Save / Update + Clear row */}
+                <div className="w-full flex justify-end gap-2 mt-1">
+                  {isEditingSaved ? (
+                    <button
+                      type="button"
+                      onClick={handleUpdateCurrent}
+                      className="
+                        px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
+                        bg-amber-50 text-amber-800 border-amber-200
+                        hover:bg-amber-200 hover:border-amber-300
+                        active:bg-amber-300 active:border-amber-400
+                        transition active:scale-95
+                        focus:outline-none focus:ring-1 focus:ring-amber-200
+                      "
+                    >
+                      Update
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSaveCurrent}
+                      className="
+                        px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
+                        bg-amber-50 text-amber-800 border-amber-200
+                        hover:bg-amber-200 hover:border-amber-300
+                        active:bg-amber-300 active:border-amber-400
+                        transition active:scale-95
+                        focus:outline-none focus:ring-1 focus:ring-amber-200
+                      "
+                    >
+                      Save
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    onClick={handleCopyExpression}
-                    aria-label={
-                      copied ? "Ranges copied" : "Copy ranges to clipboard"
-                    }
-                    className="px-2.5 py-1 rounded-md border border-gray-300 bg-white text-gray-900 hover:bg-gray-100 active:scale-95 transition focus:outline-none focus:ring-1 focus:ring-gray-300 flex items-center justify-center"
+                    onClick={handleClearAll}
+                    className="
+                      px-4 sm:px-5 py-2 rounded-md border text-[12px] font-semibold whitespace-nowrap
+                      bg-red-100 text-red-700 border-red-200
+                      hover:bg-red-400 hover:text-white hover:border-red-400
+                      active:bg-red-500 active:border-red-500
+                      transition active:scale-95
+                      focus:outline-none focus:ring-1 focus:ring-red-200
+                    "
                   >
-                    {copied ? (
-                      <span className="text-[11px] text-emerald-700 whitespace-nowrap">
-                        Ranges copied
-                      </span>
-                    ) : (
-                      // Copy icon (overlapping squares)
-                      <svg
-                        className="w-4 h-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect x="9" y="9" width="11" height="11" rx="2" ry="2" />
-                        <rect x="4" y="4" width="11" height="11" rx="2" ry="2" />
-                      </svg>
-                    )}
+                    Clear
                   </button>
                 </div>
-              )}
-            </div>
+
+                {/* Combined total + expression */}
+                <div className="w-full pt-3 border-t border-gray-100 mt-4 flex flex-col items-center gap-2">
+                  <span className="text-[11px] font-semibold text-gray-700 text-center px-2">
+                    Combined total (
+                    {mode === "STATE_JAIL"
+                      ? "State jail"
+                      : "TCJ/TDCJ/ACOP"}
+                    )
+                  </span>
+                  <span className="inline-flex items-center justify-center px-6 py-2 rounded-full bg-gray-900 text-white text-[13px] font-semibold whitespace-nowrap">
+                    {formatDays(totalDays)}
+                  </span>
+
+                  {combinedExpression && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRanges((prev) => !prev)}
+                      className="mt-1 text-[11px] text-gray-500 hover:text-gray-700 underline decoration-dotted"
+                    >
+                      {showRanges ? "Hide ranges" : "Show ranges"}
+                    </button>
+                  )}
+
+                  {combinedExpression && showRanges && (
+                    <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 px-2 text-center">
+                      <span className="text-[12px] text-gray-900 font-semibold">
+                        {combinedExpression}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleCopyExpression}
+                        aria-label={
+                          copied
+                            ? "Ranges copied"
+                            : "Copy ranges to clipboard"
+                        }
+                        className="px-2.5 py-1 rounded-md border border-gray-300 bg-white text-gray-900 hover:bg-gray-100 active:scale-95 transition focus:outline-none focus:ring-1 focus:ring-gray-300 flex items-center justify-center"
+                      >
+                        {copied ? (
+                          <span className="text-[11px] text-emerald-700 whitespace-nowrap">
+                            Ranges copied
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-4 h-4"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <rect
+                              x="9"
+                              y="9"
+                              width="11"
+                              height="11"
+                              rx="2"
+                              ry="2"
+                            />
+                            <rect
+                              x="4"
+                              y="4"
+                              width="11"
+                              height="11"
+                              rx="2"
+                              ry="2"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <DateAdjustCalculator />
+            )}
           </div>
         </div>
       </div>
@@ -918,6 +1280,5 @@ function BacktimeCard() {
 }
 
 export default function Calculator() {
-  // Just render the card; the page layout handles positioning
   return <BacktimeCard />;
 }
