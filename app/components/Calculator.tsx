@@ -357,7 +357,7 @@ function DateAdjustCalculator() {
           {/* plus/minus toggle */}
           <div className="flex flex-col items-center">
             <span className="block text-sm font-semibold text-gray-700 mb-1.5">
-              Direction
+              Operators
             </span>
             <div className="inline-flex rounded-md border border-gray-200 bg-gray-100 p-0.5">
               <button
