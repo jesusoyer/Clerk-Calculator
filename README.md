@@ -1,5 +1,7 @@
 # Clerk Calculator
 
+**[🚀 Live Demo](https://clerk-calculator.vercel.app/)**
+
 A small, focused web app to help Texas district clerk offices (and anyone doing similar work) calculate backtime and adjust dates quickly and consistently.
 
 This project currently includes two tools in one interface:
@@ -91,7 +93,7 @@ Date adjustment calculator for adding or subtracting time from a single base dat
 ## Tech Stack
 
 - **React + TypeScript**
-- Typically used with **Next.js** (`"use client"` and `*.tsx` components)
+- **Next.js** (`"use client"` and `*.tsx` components)
 - Styling via **Tailwind CSS**-style utility classes
 - Data persistence via `window.localStorage` (no backend required)
 
