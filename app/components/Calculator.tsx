@@ -192,11 +192,12 @@ function formatTodayShort(): string {
   return `${mm}/${dd}/${yy}`;
 }
 
-/** 📅 Second calculator: date adjust (add/subtract days/months/years) */
+/** 📅 Second calculator: date adjust (add/subtract days/weeks/months/years) */
 function DateAdjustCalculator() {
   const [baseDate, setBaseDate] = useState("");
   const [direction, setDirection] = useState<DateAdjustDirection>("add");
   const [days, setDays] = useState("0");
+  const [weeks, setWeeks] = useState("0");
   const [months, setMonths] = useState("0");
   const [years, setYears] = useState("0");
   const [error, setError] = useState<string | null>(null);
@@ -216,6 +217,7 @@ function DateAdjustCalculator() {
     setBaseDate("");
     setDirection("add");
     setDays("0");
+    setWeeks("0");
     setMonths("0");
     setYears("0");
     setError(null);
@@ -250,6 +252,10 @@ function DateAdjustCalculator() {
       Number.isFinite(Number(days)) && Number(days) >= 0
         ? Math.floor(Number(days))
         : 0;
+    const w =
+      Number.isFinite(Number(weeks)) && Number(weeks) >= 0
+        ? Math.floor(Number(weeks))
+        : 0;
     const m =
       Number.isFinite(Number(months)) && Number(months) >= 0
         ? Math.floor(Number(months))
@@ -270,6 +276,9 @@ function DateAdjustCalculator() {
     if (d !== 0) {
       target.setDate(target.getDate() + sign * d);
     }
+    if (w !== 0) {
+      target.setDate(target.getDate() + sign * (w * 7));
+    }
     if (m !== 0) {
       target.setMonth(target.getMonth() + sign * m);
     }
@@ -280,9 +289,10 @@ function DateAdjustCalculator() {
     const fromStr = `From ${formatLongDate(date)}`;
 
     const parts: string[] = [];
-    if (y) parts.push(`${y} ${y === 1 ? "year" : "years"}`);
-    if (m) parts.push(`${m} ${m === 1 ? "month" : "months"}`);
     if (d) parts.push(`${d} ${d === 1 ? "day" : "days"}`);
+    if (w) parts.push(`${w} ${w === 1 ? "week" : "weeks"}`);
+    if (m) parts.push(`${m} ${m === 1 ? "month" : "months"}`);
+    if (y) parts.push(`${y} ${y === 1 ? "year" : "years"}`);
 
     const verb = direction === "add" ? "Added" : "Subtracted";
     const opStr =
@@ -299,7 +309,7 @@ function DateAdjustCalculator() {
     });
   };
 
-  // Shared Enter handler for days/months/years inputs
+  // Shared Enter handler for days/weeks/months/years inputs
   const handleAmountKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -311,7 +321,7 @@ function DateAdjustCalculator() {
     // Full-width inside the shared card
     <div className="w-full flex flex-col items-center px-6 py-6">
       <div className="w-full space-y-5">
-        {/* Single row: base date, +/- and days/months/years */}
+        {/* Single row: base date, +/- and days/weeks/months/years */}
         <div className="w-full flex flex-wrap md:flex-nowrap items-end justify-center gap-5">
           {/* Base date (smaller) */}
           <div className="flex flex-col items-center">
@@ -395,6 +405,25 @@ function DateAdjustCalculator() {
               inputMode="numeric"
               value={days}
               onChange={(e) => setDays(e.target.value)}
+              onKeyDown={handleAmountKeyDown}
+              className="
+                w-20 border rounded px-3 py-2
+                text-sm text-center
+                focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500
+              "
+            />
+          </div>
+
+          {/* Weeks */}
+          <div className="flex flex-col items-center">
+            <label className="block text-sm text-gray-700 mb-1.5">
+              Weeks
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={weeks}
+              onChange={(e) => setWeeks(e.target.value)}
               onKeyDown={handleAmountKeyDown}
               className="
                 w-20 border rounded px-3 py-2
